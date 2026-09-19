@@ -145,11 +145,12 @@ section[data-testid="stSidebar"] div[role="radiogroup"] > label:has(input:checke
   color:#eafff6; font-weight:600;
 }
 .side-foot{
-  margin-top:1.1rem; padding:1.1rem 1.15rem 1.4rem;
+  margin-top:auto; padding:1.1rem 1.15rem 1.4rem;
   border-top:1px solid rgba(255,255,255,.05);
 }
 .side-foot h4{font-size:1.02rem;line-height:1.35;font-weight:600;color:#d7ecdf;margin:0 0 .55rem;}
 .side-foot span{display:block;width:34px;height:2px;background:var(--grn);border-radius:2px;}
+.side-foot .reset-label{font-size:.72rem;color:var(--mut);text-align:center;margin-top:.55rem;}
 
 /* ---------- header ---------- */
 .topbar{display:flex; align-items:flex-start; justify-content:space-between; margin-bottom:1.05rem;}
@@ -277,6 +278,16 @@ div[data-testid="stDataFrame"]{border:1px solid var(--line); border-radius:12px;
 .js-plotly-plot .plotly .modebar{display:none !important;}
 .stAlert{background:#101b2c; border:1px solid var(--line); border-radius:11px; color:#c8d6ea;}
 hr{border-color:var(--line);}
+
+/* Clear / delete button — danger styling */
+section[data-testid="stSidebar"] button[kind="secondary"]{
+  border-color:#ef444466 !important; color:#ef4444 !important;
+  background:rgba(239,68,68,.07) !important; font-size:.82rem !important;
+  border-radius:9px !important; transition:background .15s ease,border-color .15s ease;
+}
+section[data-testid="stSidebar"] button[kind="secondary"]:hover{
+  background:rgba(239,68,68,.16) !important; border-color:#ef4444aa !important;
+}
 </style>
         """,
         unsafe_allow_html=True,
@@ -645,8 +656,15 @@ def execute_pipeline(raw_df: pd.DataFrame, contamination: float):
 def load_telemetry():
     """Sidebar data source controls -> raw dataframe."""
     with st.sidebar.expander("Telemetry source", expanded=False):
-        uploaded_file = st.file_uploader("Upload CSV", type=["csv"],
-                                         help="CSV conforming to the 11-field chiller schema")
+        # Key counter lets us remount the file_uploader to clear it
+        if "uploader_key" not in st.session_state:
+            st.session_state["uploader_key"] = 0
+
+        uploaded_file = st.file_uploader(
+            "Upload CSV", type=["csv"],
+            help="CSV conforming to the 11-field chiller schema",
+            key=f"csv_upload_{st.session_state['uploader_key']}",
+        )
         contamination = st.slider("Anomaly sensitivity", 0.01, 0.15, 0.05, 0.01)
 
         is_demo = False
@@ -659,6 +677,26 @@ def load_telemetry():
             else:
                 loaded_df, quality_report = file_df, file_report
                 st.success(f"Loaded {uploaded_file.name}")
+
+            # ── Delete / Clear button ────────────────────────────────────────
+            st.markdown(
+                """<style>
+                div[data-testid="stButton"] button[kind="secondary"].clear-btn {
+                    border-color: #ef4444 !important;
+                    color: #ef4444 !important;
+                }
+                </style>""",
+                unsafe_allow_html=True,
+            )
+            if st.button(
+                "🗑  Clear data",
+                help="Remove the uploaded CSV and reset the dashboard",
+                use_container_width=True,
+                type="secondary",
+            ):
+                st.session_state["uploader_key"] += 1   # remounts the file_uploader
+                execute_pipeline.clear()                 # wipe cached pipeline results
+                st.rerun()
 
         if loaded_df is None:
             mode = st.radio("Fallback source", ["Default dataset", "Synthetic demo data"], index=0)
@@ -704,12 +742,29 @@ def render_sidebar_brand() -> None:
 
 def render_sidebar_footer() -> None:
     st.sidebar.markdown(
-        """<div class="side-foot">
-
-<span></span>
-</div>""",
+        """<div class="side-foot"><span></span></div>""",
         unsafe_allow_html=True,
     )
+    # ── Full reset button ────────────────────────────────────────────────────
+    with st.sidebar:
+        if st.button(
+            "🗑  Reset session",
+            help="Clear all session data, uploaded files and cached results — start fresh",
+            use_container_width=True,
+            type="secondary",
+            key="global_reset_btn",
+        ):
+            # Wipe every session-state key
+            for key in list(st.session_state.keys()):
+                del st.session_state[key]
+            # Clear the analysis pipeline cache
+            execute_pipeline.clear()
+            st.rerun()
+        st.markdown(
+            '<p style="font-size:.7rem;color:#4a5a72;text-align:center;margin-top:.3rem;">'
+            'Clears data, cache &amp; filters</p>',
+            unsafe_allow_html=True,
+        )
 
 
 
